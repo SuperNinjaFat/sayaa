@@ -71,11 +71,12 @@ class Application(Frame):
 
         # random background circle test (creates more particles)
         # loop to create and append particles
-        for i in range(7):
+        for i in range(20):
             size = random.randint(10, 20)
+            density = random.randint(1, 20)
             x = random.randint(size, SCREEN_WIDTH - size)
             y = random.randint(size, int(SCREEN_HEIGHT / 2) - size)
-            particles_master.append(Particle(x=x, y=y, p_size=size, p_color=COLOR_GRAY_41, p_speed=SPEED_DEFAULT))
+            particles_master.append(Particle(x=x, y=y, p_size=size, p_color=COLOR_GRAY_41, p_mass=density * size ** 2))
 
         # update the simulation until the user exits
         while 1:
@@ -122,13 +123,14 @@ class Application(Frame):
 
 class Particle:
     def __init__(self, x, y, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
-                 p_speed=SPEED_DEFAULT):
+                 p_speed=SPEED_DEFAULT, p_mass=1):
         self.x, self.y = x, y
         self.size = p_size
         self.color = p_color
         self.thickness = p_thickness
         self.speed = p_speed
         self.angle = p_angle
+        self.mass = p_mass
 
     def bounce(self):
         if self.x > SCREEN_WIDTH - self.size:
@@ -176,16 +178,27 @@ def collide(p1, p2):
 
     distance = math.hypot(dx, dy)
     if distance < p1.size + p2.size:
-        tangent = math.atan2(dx, dy)
-        p1.angle = 2 * tangent - p1.angle
-        p2.angle = 2 * tangent - p2.angle
-        (p1.speed, p2.speed) = (p2.speed, p1.speed)
+        total_mass = p1.mass + p2.mass
+        # angle = 0.5 * math.pi + tangent
+        # tangent = math.atan2(dx, dy)
+        # p1.angle = 2 * tangent - p1.angle
+        # p2.angle = 2 * tangent - p2.angle
+        angle = math.atan2(dy, dx) + 0.5 * math.pi
+        # (p1.speed, p2.speed) = (p2.speed, p1.speed)
+        (p1.angle, p1.speed) = addVectors(p1.angle, p1.speed*(p1.mass-p2.mass)/total_mass,
+                                          angle, 2*p2.speed*p2.mass/total_mass)
+        (p2.angle, p2.speed) = addVectors(p2.angle, p2.speed*(p2.mass-p1.mass)/total_mass,
+                                          angle+math.pi, 2*p1.speed*p1.mass/total_mass)
         p1.speed *= ELASTICITY_DEFAULT
         p2.speed *= ELASTICITY_DEFAULT
-        angle = 0.5 * math.pi + tangent
-        p1.x += math.sin(angle)
-        p1.y -= math.cos(angle)
-        p2.x -= math.sin(angle)
-        p2.y += math.cos(angle)
+        overlap = 0.5 * (p1.size + p2.size - distance + 1)
+        # p1.x += math.sin(angle)
+        p1.x += math.sin(angle) * overlap
+        # p1.y -= math.cos(angle)
+        p1.y -= math.cos(angle) * overlap
+        # p2.x -= math.sin(angle)
+        p2.x -= math.sin(angle) * overlap
+        # p2.y += math.cos(angle)
+        p2.y += math.cos(angle) * overlap
 
 
