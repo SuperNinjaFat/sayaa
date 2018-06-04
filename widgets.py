@@ -4,6 +4,7 @@ import random
 from tkinter import *
 
 pygame.init()
+pygame.font.init()
 
 SCREEN_WIDTH, SCREEN_HEIGHT = 750, 500
 FLOOR_HEIGHT = 470
@@ -20,6 +21,8 @@ COLOR_GRAY_19 = 31, 31, 31
 COLOR_GRAY_21 = 54, 54, 54
 COLOR_GRAY_41 = 105, 105, 105
 COLOR_ORANGE = 251, 126, 20
+
+FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 20)
 
 WIDTH_PAIR_DEFAULT = 60
 WIDTH_PARTICLE_DEFAULT = 15
@@ -123,7 +126,7 @@ class Application(Frame):
 
 class Particle:
     def __init__(self, x, y, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
-                 p_speed=SPEED_DEFAULT, p_mass=1):
+                 p_speed=SPEED_DEFAULT, p_mass=1, p_text=None):
         self.x, self.y = x, y
         self.size = p_size
         self.color = p_color
@@ -131,6 +134,10 @@ class Particle:
         self.speed = p_speed
         self.angle = p_angle
         self.mass = p_mass
+        if p_text is None:
+            self.text = str(self.mass)
+        else:
+            self.text = p_text
 
     def bounce(self):
         if self.x > SCREEN_WIDTH - self.size:
@@ -155,16 +162,20 @@ class Particle:
 
     def display(self):
         pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.size, self.thickness)
+        # text movement
+        # display mass
+        # text_to_screen(self.mass, self.x * 0.99, self.y * 0.97, size=20)
+        screen.blit(FONT_ORB_DEFAULT.render(self.text, False, COLOR_ORANGE), (self.x * 0.99, self.y * 0.97))
 
     def move(self):
         self.x += math.sin(self.angle) * self.speed
         self.y -= math.cos(self.angle) * self.speed
-        (self.angle, self.speed) = addVectors(self.angle, self.speed, math.pi, MAGNITUDE_DEFAULT)
+        (self.angle, self.speed) = add_vectors(self.angle, self.speed, math.pi, MAGNITUDE_DEFAULT)
         self.speed *= DRAG_DEFAULT
         self.speed *= (1 - self.size / SPEED_SIZE_DEFAULT)
 
 
-def addVectors(angle1, length1, angle2, length2):
+def add_vectors(angle1, length1, angle2, length2):
     x = math.sin(angle1) * length1 + math.sin(angle2) * length2
     y = math.cos(angle1) * length1 + math.cos(angle2) * length2
     length = math.hypot(x, y)
@@ -185,10 +196,10 @@ def collide(p1, p2):
         # p2.angle = 2 * tangent - p2.angle
         angle = math.atan2(dy, dx) + 0.5 * math.pi
         # (p1.speed, p2.speed) = (p2.speed, p1.speed)
-        (p1.angle, p1.speed) = addVectors(p1.angle, p1.speed*(p1.mass-p2.mass)/total_mass,
-                                          angle, 2*p2.speed*p2.mass/total_mass)
-        (p2.angle, p2.speed) = addVectors(p2.angle, p2.speed*(p2.mass-p1.mass)/total_mass,
-                                          angle+math.pi, 2*p1.speed*p1.mass/total_mass)
+        (p1.angle, p1.speed) = add_vectors(p1.angle, p1.speed * (p1.mass - p2.mass) / total_mass,
+                                           angle, 2 * p2.speed * p2.mass / total_mass)
+        (p2.angle, p2.speed) = add_vectors(p2.angle, p2.speed * (p2.mass - p1.mass) / total_mass,
+                                           angle + math.pi, 2 * p1.speed * p1.mass / total_mass)
         p1.speed *= ELASTICITY_DEFAULT
         p2.speed *= ELASTICITY_DEFAULT
         overlap = 0.5 * (p1.size + p2.size - distance + 1)
@@ -202,3 +213,16 @@ def collide(p1, p2):
         p2.y += math.cos(angle) * overlap
 
 
+# adapted from https://stackoverflow.com/questions/20842801/how-to-display-text-in-pygame
+def text_to_screen(text, x, y, size=50,
+                   color=COLOR_ORANGE, font_type='data/fonts/r_fallouty.ttf'):
+    try:
+
+        text = str(text)
+        font = pygame.font.Font(font_type, size)
+        text = font.render(text, True, color)
+        screen.blit(text, (x, y))
+
+    except Exception as e:
+        print('Font Error')
+        raise e
