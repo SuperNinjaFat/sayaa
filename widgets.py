@@ -4,7 +4,6 @@ import pygame
 import random
 
 pygame.init()
-# pygame.font.init()
 
 # boundaries
 SCREEN_WIDTH, SCREEN_HEIGHT = 750, 500
@@ -60,8 +59,8 @@ class Environment:
         pygame.display.set_caption('Stand As You Are Able')
 
         # create particle pairs:
-        pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=100000)
-        pair_2 = self.Pair(pp_x=int(SCREEN_WIDTH / 2) + 90, pp_mass=100000)
+        pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=100000, pp_strength=1)
+        pair_2 = self.Pair(pp_x=int(SCREEN_WIDTH / 2) + 90, pp_mass=100000, pp_strength=1)
 
         # append particle pairs to particle pair list
         self.particles_pairs.append(pair_1)
@@ -74,7 +73,7 @@ class Environment:
 
         # random background circle test (creates more particles)
         # loop to create and append particles
-        for i in range(10):
+        for i in range(40):
             size = random.randint(5, 10)  # (10, 20)
             density = random.randint(15, 20)  # (1, 20)
             x = random.randint(size, SCREEN_WIDTH - size)
@@ -122,6 +121,9 @@ class Environment:
 
     # particle movement
     def update(self):
+        for j, spring in enumerate(self.particles_pairs):
+            spring.display()
+            spring.update()
         for i, particle in enumerate(self.particles_master):
             if not self.paused:
                 particle.move()
@@ -129,25 +131,42 @@ class Environment:
                 for particle2 in self.particles_master[i + 1:]:
                     collide(particle, particle2)
             else:
-                screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE), ((self.screen_width / 2) * 0.99 - 20, (self.screen_height / 2) * 0.97))
+                screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE),
+                            ((self.screen_width / 2) * 0.99 - 20, (self.screen_height / 2) * 0.97))
             particle.display()
 
     class Pair:
-        # TODO: Create a bar between the orbs
         def __init__(self, p_width=WIDTH_PARTICLE_DEFAULT, pp_x=int(SCREEN_WIDTH / 2), pp_y=FLOOR_HEIGHT,
-                     pp_width=WIDTH_PAIR_DEFAULT, pp_color=None, pp_mass=1):
+                     pp_length=WIDTH_PAIR_DEFAULT, pp_color=None, pp_mass=1, pp_strength=0.5):
             if pp_color is None:
                 pp_color = rand_color()
             # adjust floor placement based on width
             self.orb_pair = []
             pp_y -= p_width
             self.orb1 = Particle(pp_x, pp_y, p_color=pp_color, p_size=p_width, p_mass=pp_mass)
-            self.orb2 = Particle(pp_x + pp_width, pp_y, p_color=pp_color, p_size=p_width, p_mass=pp_mass)
+            self.orb2 = Particle(pp_x + pp_length, pp_y, p_color=pp_color, p_size=p_width, p_mass=pp_mass)
             self.orb_pair.append(self.orb1)
             self.orb_pair.append(self.orb2)
+            # spring variables
+            self.length = pp_length
+            self.strength = pp_strength
+
+        def display(self):
+            pygame.draw.aaline(screen, COLOR_GRAY_21, (int(self.orb1.x), int(self.orb1.y)),
+                                   (int(self.orb2.x), int(self.orb2.y)))
 
         def dump(self):
             return self.orb_pair
+
+        def update(self):
+            dx = self.orb1.x - self.orb2.x
+            dy = self.orb1.y - self.orb2.y
+            dist = math.hypot(dx, dy)
+            theta = math.atan2(dy, dx)
+            force = (self.length - dist) * self.strength
+
+            self.orb1.accelerate(theta + 0.5 * math.pi, force/self.orb1.mass)
+            self.orb2.accelerate(theta - 0.5 * math.pi, force/self.orb2.mass)
 
 
 class Particle:
@@ -165,6 +184,9 @@ class Particle:
             self.text = p_text
         self.color = p_color
         self.thickness = p_thickness
+
+    def accelerate(self, a_angle, a_length):
+        (self.angle, self.speed) = add_vectors(self.angle, self.speed, a_angle, a_length)
 
     def bounce(self):
         if self.x > SCREEN_WIDTH - self.size:
@@ -189,9 +211,7 @@ class Particle:
 
     def display(self):
         pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.size, self.thickness)
-        # text movement
         # display mass
-        # text_to_screen(self.mass, self.x * 0.99, self.y * 0.97, size=20)
         screen.blit(FONT_ORB_DEFAULT.render(self.text, False, COLOR_ORANGE), (self.x * 0.99, self.y * 0.97))
 
     def move(self):
