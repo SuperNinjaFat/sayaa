@@ -30,6 +30,7 @@ COLOR_ORANGE = 251, 126, 20
 
 # fonts
 FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 15)
+FONT_PAUSE = pygame.font.Font('data/fonts/r_fallouty.ttf', 25)
 
 # particle dimensions
 WIDTH_PAIR_DEFAULT = 60
@@ -38,6 +39,9 @@ WIDTH_PARTICLE_DEFAULT = 15
 
 class Environment:
     def __init__(self, width=SCREEN_WIDTH, height=SCREEN_HEIGHT, floor_height=FLOOR_HEIGHT):
+        self.reset(width, height, floor_height)
+
+    def reset(self, width=SCREEN_WIDTH, height=SCREEN_HEIGHT, floor_height=FLOOR_HEIGHT):
         self.screen_width = width
         self.screen_height = height
         self.screen_size = self.screen_width, self.screen_height
@@ -48,6 +52,9 @@ class Environment:
         self.particles_master = []
         # list to contain pairs
         self.particles_pairs = []
+
+        # pause
+        self.paused = False
 
     def game(self):
         pygame.display.set_caption('Stand As You Are Able')
@@ -74,6 +81,14 @@ class Environment:
             y = random.randint(size, int(SCREEN_HEIGHT / 2) - size)
             self.particles_master.append(Particle(x=x, y=y, p_size=size, p_color=COLOR_GRAY_41, p_mass=density * size ** 2))
 
+        # links the keyboard input with the relevant function
+        key_to_function = {
+            pygame.K_LEFT:      (lambda thing: thing.thrust(1)),
+            pygame.K_UP:        (lambda thing: thing.thrust(1)),
+            pygame.K_RIGHT:     (lambda thing: thing.thrust(-1)),
+            pygame.K_DOWN:      (lambda thing: thing.thrust(-1))
+        }
+
         # update the simulation until the user exits
         while 1:
             # loop over event list to detect quitting
@@ -81,18 +96,40 @@ class Environment:
                 # exit the program
                 if event.type == pygame.QUIT:
                     sys.exit()
+                if event.type == pygame.KEYDOWN:
+                    # print("event.key (DOWN): ", event.key)
+                    if event.key in key_to_function:
+                        key_to_function[event.key](self)
+                    elif event.key == pygame.K_ESCAPE:
+                        self.paused = not self.paused
+                    elif event.key == pygame.K_F10:
+                        self.reset()
+                        self.game()
+                # elif event.type == pygame.KEYUP:
+                #     # print("event.key (UP):   ", event.key)
+                #     if pygame.K_UP == event.key or pygame.K_LEFT == event.key:
+                #         self.thrust(engage=False)
+                #     elif pygame.K_DOWN == event.key or pygame.K_RIGHT == event.key:
+                #         self.thrust(engage=False)
             # screen fill (removes blur)
             screen.fill(COLOR_BLACK)
             self.update()
             pygame.display.update()
 
+    def thrust(self, amount=None, engage=True):
+        print("thrust:  ", amount)
+        print("engaged: ", engage)
+
     # particle movement
     def update(self):
         for i, particle in enumerate(self.particles_master):
-            particle.move()
-            particle.bounce()
-            for particle2 in self.particles_master[i + 1:]:
-                collide(particle, particle2)
+            if not self.paused:
+                particle.move()
+                particle.bounce()
+                for particle2 in self.particles_master[i + 1:]:
+                    collide(particle, particle2)
+            else:
+                screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE), ((self.screen_width / 2) * 0.99 - 20, (self.screen_height / 2) * 0.97))
             particle.display()
 
     class Pair:
