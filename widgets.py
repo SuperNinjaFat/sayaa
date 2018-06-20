@@ -18,6 +18,9 @@ DRAG_DEFAULT = 0.9995  # 0.999
 ELASTICITY_DEFAULT = 0.75  # 0.75
 MASS_AIR_DEFAULT = 0.2  # 0.2
 
+# forces
+THRUST_SPEED_DEFAULT = 0.07  # 7.0
+
 screen = pygame.display.set_mode(SCREEN_SIZE)
 
 # colors
@@ -52,14 +55,18 @@ class Environment:
         # list to contain pairs
         self.particles_pairs = []
 
+        self.pair_player = 0
+
         # pause
         self.paused = False
+
+        self.thrust_direction = 0
 
     def game(self):
         pygame.display.set_caption('Stand As You Are Able')
 
         # create particle pairs:
-        pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=100000, pp_strength=1)
+        pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=1000, pp_strength=1)
         pair_2 = self.Pair(pp_x=int(SCREEN_WIDTH / 2) + 90, pp_mass=100000, pp_strength=1)
 
         # append particle pairs to particle pair list
@@ -73,7 +80,7 @@ class Environment:
 
         # random background circle test (creates more particles)
         # loop to create and append particles
-        for i in range(40):
+        for i in range(3):
             size = random.randint(5, 10)  # (10, 20)
             density = random.randint(15, 20)  # (1, 20)
             x = random.randint(size, SCREEN_WIDTH - size)
@@ -82,10 +89,10 @@ class Environment:
 
         # links the keyboard input with the relevant function
         key_to_function = {
-            pygame.K_LEFT:      (lambda thing: thing.thrust(1)),
-            pygame.K_UP:        (lambda thing: thing.thrust(1)),
-            pygame.K_RIGHT:     (lambda thing: thing.thrust(-1)),
-            pygame.K_DOWN:      (lambda thing: thing.thrust(-1))
+            pygame.K_LEFT:      (lambda thing: thing.set_thrust_direction(-1)),
+            pygame.K_UP:        (lambda thing: thing.set_thrust_direction(-1)),
+            pygame.K_RIGHT:     (lambda thing: thing.set_thrust_direction(1)),
+            pygame.K_DOWN:      (lambda thing: thing.set_thrust_direction(1))
         }
 
         # update the simulation until the user exits
@@ -104,6 +111,8 @@ class Environment:
                     elif event.key == pygame.K_F10:
                         self.reset()
                         self.game()
+                elif event.type == pygame.KEYUP:
+                    self.thrust_direction = 0
                 # elif event.type == pygame.KEYUP:
                 #     # print("event.key (UP):   ", event.key)
                 #     if pygame.K_UP == event.key or pygame.K_LEFT == event.key:
@@ -115,9 +124,13 @@ class Environment:
             self.update()
             pygame.display.update()
 
-    def thrust(self, amount=None, engage=True):
-        print("thrust:  ", amount)
-        print("engaged: ", engage)
+    def set_thrust_direction(self, direction):
+        self.thrust_direction = direction
+
+    def thrust(self):
+        if self.thrust_direction is not 0:
+            print("thrust:  ", self.thrust_direction)
+            self.particles_pairs[self.pair_player].thrust(self.thrust_direction)
 
     # particle movement
     def update(self):
@@ -130,6 +143,7 @@ class Environment:
                 particle.bounce()
                 for particle2 in self.particles_master[i + 1:]:
                     collide(particle, particle2)
+                self.thrust()
             else:
                 screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE),
                             ((self.screen_width / 2) * 0.99 - 20, (self.screen_height / 2) * 0.97))
@@ -158,6 +172,33 @@ class Environment:
         def dump(self):
             return self.orb_pair
 
+        def thrust(self, amount):
+            # set what orb is to the left and which one is on the right
+            if self.orb1.x <= self.orb2.x:
+                orb_left = 0
+                orb_right = 1
+            else:
+                orb_left = 1
+                orb_right = 0
+            dx = self.orb1.x - self.orb2.x
+            dy = self.orb1.y - self.orb2.y
+            theta = math.atan2(dy, dx)  # - 0.5 * math.pi
+            # if amount is negative, move left
+            if amount is -1:
+                # todo: calculate the angle at which the thrust should be applied
+                theta = theta + 0.5 * math.pi
+                # apply thrust to orb_left
+                print("left orb theta:  ", theta)
+                self.orb_pair[orb_left].accelerate(theta, THRUST_SPEED_DEFAULT)
+            # if amount is positive, move right
+            else:
+                # todo: calculate the angle at which the thrust should be applied
+                theta = -theta - 0.5 * math.pi
+                # apply thrust to orb_right
+                print("right orb theta:  ", theta)
+                self.orb_pair[orb_right].accelerate(theta, THRUST_SPEED_DEFAULT)
+
+        # update the spring constraints
         def update(self):
             dx = self.orb1.x - self.orb2.x
             dy = self.orb1.y - self.orb2.y
@@ -179,7 +220,7 @@ class Particle:
         self.mass = p_mass
         self.drag = (self.mass/(self.mass + MASS_AIR_DEFAULT)) ** self.size
         if p_text is None:
-            self.text = str(self.mass)
+            self.text = str(self.mass)  # self.angle)
         else:
             self.text = p_text
         self.color = p_color
@@ -211,6 +252,8 @@ class Particle:
 
     def display(self):
         pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.size, self.thickness)
+        # display angle
+        # self.text = str(round(self.angle))
         # display mass
         screen.blit(FONT_ORB_DEFAULT.render(self.text, False, COLOR_ORANGE), (self.x * 0.99, self.y * 0.97))
 
