@@ -410,17 +410,21 @@ def collide(p1, p2):
                                            angle, 2 * p2.speed * p2.mass / total_mass)
         (p2.angle, p2.speed) = add_vectors(p2.angle, p2.speed * (p2.mass - p1.mass) / total_mass,
                                            angle + math.pi, 2 * p1.speed * p1.mass / total_mass)
-        p1.speed *= ELASTICITY_DEFAULT
-        p2.speed *= ELASTICITY_DEFAULT
+        if not p1.static:
+            p1.speed *= ELASTICITY_DEFAULT
+        if not p2.static:
+            p2.speed *= ELASTICITY_DEFAULT
         overlap = 0.5 * (p1.size + p2.size - distance + 1)
-        # p1.x += math.sin(angle)
-        p1.x += math.sin(angle) * overlap
-        # p1.y -= math.cos(angle)
-        p1.y -= math.cos(angle) * overlap
-        # p2.x -= math.sin(angle)
-        p2.x -= math.sin(angle) * overlap
-        # p2.y += math.cos(angle)
-        p2.y += math.cos(angle) * overlap
+        if not p1.static:
+            # p1.x += math.sin(angle)
+            p1.x += math.sin(angle) * overlap
+            # p1.y -= math.cos(angle)
+            p1.y -= math.cos(angle) * overlap
+        if not p2.static:
+            # p2.x -= math.sin(angle)
+            p2.x -= math.sin(angle) * overlap
+            # p2.y += math.cos(angle)
+            p2.y += math.cos(angle) * overlap
 
 
 def rand_color():
