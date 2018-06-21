@@ -33,6 +33,7 @@ COLOR_ORANGE = 251, 126, 20
 # fonts
 FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 15)
 FONT_PAUSE = pygame.font.Font('data/fonts/r_fallouty.ttf', 25)
+FONT_PAIR_LEFT = pygame.font.Font('data/fonts/r_fallouty.ttf', 40)
 
 # particle dimensions
 WIDTH_PAIR_DEFAULT = 60
@@ -55,28 +56,53 @@ class Environment:
         # list to contain pairs
         self.particles_pairs = []
 
+        # dictionary to contain preparations for adding pairs into the world
+        self.particles_pairs_prep = {
+            "color": [],
+            "size": [],
+            "mass": [],
+            "strength": []}
+
+        # amount of pairs desired to spawn
+        self.pair_amount = 5
+
+        # tracks what pair the player is in control of
         self.pair_player = 0
+
+
+        # indicator of the remaining pairs you can spawn
+        self.indicator_pair_remaining = self.pair_amount - 1
 
         # pause
         self.paused = False
 
         self.thrust_direction = 0
 
+        # define where particles_pairs will spawn to
+        self.spawner_x = int(SCREEN_WIDTH / 2) - 100
+        self.spawner_y = FLOOR_HEIGHT - 70
+
     def game(self):
         pygame.display.set_caption('Stand As You Are Able')
 
-        # create particle pairs:
-        pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=1000, pp_strength=1)
-        pair_2 = self.Pair(pp_x=int(SCREEN_WIDTH / 2) + 90, pp_mass=100000, pp_strength=1)
+        # create list of particle pairs with matching orb colors todo: add file loading feature
+        self.particles_pairs_prep = self.pair_creation(p_amount=self.pair_amount)
 
-        # append particle pairs to particle pair list
-        self.particles_pairs.append(pair_1)
-        self.particles_pairs.append(pair_2)
+        # create the starter orb
+        orb_starter = self.orb_creation()
 
-        # append paired particles to master list
-        for pair_increment in range(len(self.particles_pairs)):
-            self.particles_master.append(self.particles_pairs[pair_increment].dump()[0])
-            self.particles_master.append(self.particles_pairs[pair_increment].dump()[1])
+        # # create particle pairs:
+        # pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=1000, pp_strength=1)
+        # pair_2 = self.Pair(pp_x=int(SCREEN_WIDTH / 2) + 90, pp_mass=100000, pp_strength=1)
+        #
+        # # append particle pairs to particle pair list
+        # self.particles_pairs.append(pair_1)
+        # self.particles_pairs.append(pair_2)
+        #
+        # # append paired particles to master list
+        # for pair_increment in range(len(self.particles_pairs)):
+        #     self.particles_master.append(self.particles_pairs[pair_increment].orb1)
+        #     self.particles_master.append(self.particles_pairs[pair_increment].orb2)
 
         # random background circle test (creates more particles)
         # loop to create and append particles
@@ -86,6 +112,12 @@ class Environment:
             x = random.randint(size, SCREEN_WIDTH - size)
             y = random.randint(size, int(SCREEN_HEIGHT / 2) - size)
             self.particles_master.append(Particle(x=x, y=y, p_size=size, p_color=COLOR_GRAY_41, p_mass=density * size ** 2))
+
+        # append the starter orb to master list
+        self.particles_master.append(orb_starter)
+
+        # add the first pair
+        self.pair_activation()
 
         # links the keyboard input with the relevant function
         key_to_function = {
@@ -106,8 +138,17 @@ class Environment:
                     # print("event.key (DOWN): ", event.key)
                     if event.key in key_to_function:
                         key_to_function[event.key](self)
+                    # pause the game
                     elif event.key == pygame.K_ESCAPE:
                         self.paused = not self.paused
+                    # spawn new pair
+                    elif event.key == pygame.K_SPACE:
+                        if self.pair_player + 1 < self.pair_amount:
+                            self.pair_activation()
+                            # increase pair_player
+                            self.pair_player += 1
+                            # decrease indicator_pair_remaining
+                            self.indicator_pair_remaining -= 1
                     elif event.key == pygame.K_F10:
                         self.reset()
                         self.game()
@@ -124,11 +165,80 @@ class Environment:
             self.update()
             pygame.display.update()
 
+    # return a list specifying starter orb and particle pair color, size, mass, and strength based upon the parameters.
+    def pair_creation(self, p_amount=3, p_list_color=[], p_list_size=[], p_list_density=[], p_list_mass=[],
+                      p_list_strength=[]):
+        """
+
+        :param p_amount: amount of colors to share amongst all orbs. (the number of pairs is 1 less than this)
+        :param p_list_color: list of colors for the starting orb and each orb among pairs. Default randomizes colors.
+        :param p_list_size: list of sizes for the starting orb and each pair. Default randomizes sizes.
+        :param p_list_density: list of densities to calculate the starting orb's and each pair's masses.
+        :param p_list_mass: list of masses for the starting orb and each pair. Default randomizes masses.
+        :param p_list_strength: list of strengths for each pair. Default gives default strengths.
+        :return: return a list of particle pairs based upon the parameters.
+        """
+
+        # fill lists with ranged random values until their sizes meet the specified amount.
+        # list of colors must meet the specified amount.
+        while len(p_list_color) < p_amount:
+            p_list_color.append(rand_color())
+        # list of sizes must meet the specified amount.
+        while len(p_list_size) < p_amount:
+            p_list_size.append(random.randint(10, 15))
+        # list of densities must meet the specified amount.
+        while len(p_list_density) < p_amount:
+            p_list_density.append(random.randint(15, 20))
+        # list of masses must meet the specified amount.
+        while len(p_list_mass) < p_amount:
+            p_list_mass.append(p_list_density[len(p_list_mass)] * p_list_size[len(p_list_mass)] ** 2)
+        # list of strengths must be 1 less than the specified amount (as it only affects pairs)
+        while len(p_list_strength) + 1 < p_amount:
+            p_list_strength.append(0.5)
+
+        # create a particle pair dictionary
+        # Note that density is absent, as it is dropped after calculating mass.
+        pair_dict = {
+            "color": p_list_color,
+            "size": p_list_size,
+            "mass": p_list_mass,
+            "strength": p_list_strength}
+
+        # return the list of pairs
+        return pair_dict
+
+    def orb_creation(self, p_x=int(SCREEN_WIDTH / 2), p_y=FLOOR_HEIGHT):
+        """
+
+        :param p_x: x placement for starter orb. Defaults to the center of the screen.
+        :param p_y: y placement for the starter orb. Defaults to merge with the floor.
+        :return returns the starter orb.
+        """
+        # create starter orb
+        orb_starter = Particle(x=p_x, y=p_y, static=True, p_color=self.particles_pairs_prep["color"][0],
+                               p_size=self.particles_pairs_prep["size"][0], p_mass=self.particles_pairs_prep["mass"][0])
+        return orb_starter
+
+    # places the next pair in particles_pairs into the world and iterates pair_player to reflect this
+    def pair_activation(self):
+        # iterates pair_player. Once it is larger than the size of the list, return false.
+
+        # append pairs to particles_pairs list
+        self.particles_pairs.append(self.Pair(pp_x=self.spawner_x, pp_y=self.spawner_y,
+                                               pp_color_1=self.particles_pairs_prep["color"][self.pair_player],
+                                               pp_color_2=self.particles_pairs_prep["color"][self.pair_player+1],
+                                               p_width=self.particles_pairs_prep["size"][self.pair_player],
+                                               pp_mass=self.particles_pairs_prep["mass"][self.pair_player],
+                                               pp_strength=self.particles_pairs_prep["strength"][self.pair_player]))
+        # append paired particles to master list
+        self.particles_master.append(self.particles_pairs[len(self.particles_pairs)-1].orb1)
+        self.particles_master.append(self.particles_pairs[len(self.particles_pairs)-1].orb2)
+
     def set_thrust_direction(self, direction):
         self.thrust_direction = direction
 
     def thrust(self):
-        if self.thrust_direction is not 0:
+        if self.thrust_direction is not 0 and self.particles_pairs:
             print("thrust:  ", self.thrust_direction)
             self.particles_pairs[self.pair_player].thrust(self.thrust_direction)
 
@@ -145,20 +255,30 @@ class Environment:
                     collide(particle, particle2)
                 self.thrust()
             else:
+                # pause screen text
                 screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE),
                             ((self.screen_width / 2) * 0.99 - 20, (self.screen_height / 2) * 0.97))
+            # counter text (displays how many pairs you have left)
+            screen.blit(FONT_PAIR_LEFT.render(str(self.indicator_pair_remaining), False, COLOR_ORANGE),
+                        ((self.screen_width * 0.9) * 0.99 - 20, (self.screen_height / 8) * 0.97))
             particle.display()
 
     class Pair:
         def __init__(self, p_width=WIDTH_PARTICLE_DEFAULT, pp_x=int(SCREEN_WIDTH / 2), pp_y=FLOOR_HEIGHT,
-                     pp_length=WIDTH_PAIR_DEFAULT, pp_color=None, pp_mass=1, pp_strength=0.5):
-            if pp_color is None:
-                pp_color = rand_color()
+                     pp_length=WIDTH_PAIR_DEFAULT, pp_color_1=None, pp_color_2=None, pp_mass=1, pp_strength=0.5):
+            # apply colors to orbs
+            if pp_color_1 is None and pp_color_2 is None:
+                pp_color_1 = rand_color()
+                pp_color_2 = pp_color_1
+            if pp_color_1 is None:
+                pp_color_1 = rand_color()
+            if pp_color_2 is None:
+                pp_color_2 = rand_color()
             # adjust floor placement based on width
             self.orb_pair = []
             pp_y -= p_width
-            self.orb1 = Particle(pp_x, pp_y, p_color=pp_color, p_size=p_width, p_mass=pp_mass)
-            self.orb2 = Particle(pp_x + pp_length, pp_y, p_color=pp_color, p_size=p_width, p_mass=pp_mass)
+            self.orb1 = Particle(pp_x, pp_y, p_color=pp_color_1, p_size=p_width, p_mass=pp_mass)
+            self.orb2 = Particle(pp_x + pp_length, pp_y, p_color=pp_color_2, p_size=p_width, p_mass=pp_mass)
             self.orb_pair.append(self.orb1)
             self.orb_pair.append(self.orb2)
             # spring variables
@@ -168,9 +288,6 @@ class Environment:
         def display(self):
             pygame.draw.aaline(screen, COLOR_GRAY_21, (int(self.orb1.x), int(self.orb1.y)),
                                    (int(self.orb2.x), int(self.orb2.y)))
-
-        def dump(self):
-            return self.orb_pair
 
         def thrust(self, amount):
             # set what orb is to the left and which one is on the right
@@ -211,9 +328,10 @@ class Environment:
 
 
 class Particle:
-    def __init__(self, x, y, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
+    def __init__(self, x, y, static=False, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
                  p_speed=SPEED_DEFAULT, p_mass=1, p_text=None):
         self.x, self.y = x, y
+        self.static = static
         self.size = p_size
         self.speed = p_speed
         self.angle = p_angle
@@ -230,25 +348,26 @@ class Particle:
         (self.angle, self.speed) = add_vectors(self.angle, self.speed, a_angle, a_length)
 
     def bounce(self):
-        if self.x > SCREEN_WIDTH - self.size:
-            self.x = 2 * (SCREEN_WIDTH - self.size) - self.x
-            self.angle = - self.angle
-            self.speed *= ELASTICITY_DEFAULT
+        if not self.static:
+            if self.x > SCREEN_WIDTH - self.size:
+                self.x = 2 * (SCREEN_WIDTH - self.size) - self.x
+                self.angle = - self.angle
+                self.speed *= ELASTICITY_DEFAULT
 
-        elif self.x < self.size:
-            self.x = 2 * self.size - self.x
-            self.angle = - self.angle
-            self.speed *= ELASTICITY_DEFAULT
+            elif self.x < self.size:
+                self.x = 2 * self.size - self.x
+                self.angle = - self.angle
+                self.speed *= ELASTICITY_DEFAULT
 
-        if self.y > FLOOR_HEIGHT - self.size:
-            self.y = 2 * (FLOOR_HEIGHT - self.size) - self.y
-            self.angle = math.pi - self.angle
-            self.speed *= ELASTICITY_DEFAULT
+            if self.y > FLOOR_HEIGHT - self.size:
+                self.y = 2 * (FLOOR_HEIGHT - self.size) - self.y
+                self.angle = math.pi - self.angle
+                self.speed *= ELASTICITY_DEFAULT
 
-        elif self.y < self.size:
-            self.y = 2 * self.size - self.y
-            self.angle = math.pi - self.angle
-            self.speed *= ELASTICITY_DEFAULT
+            elif self.y < self.size:
+                self.y = 2 * self.size - self.y
+                self.angle = math.pi - self.angle
+                self.speed *= ELASTICITY_DEFAULT
 
     def display(self):
         pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), self.size, self.thickness)
@@ -258,11 +377,12 @@ class Particle:
         screen.blit(FONT_ORB_DEFAULT.render(self.text, False, COLOR_ORANGE), (self.x * 0.99, self.y * 0.97))
 
     def move(self):
-        self.x += math.sin(self.angle) * self.speed
-        self.y -= math.cos(self.angle) * self.speed
-        (self.angle, self.speed) = add_vectors(self.angle, self.speed, math.pi, MAGNITUDE_DEFAULT)
-        self.speed *= self.drag
-        self.speed *= (1 - self.size / SPEED_SIZE_DEFAULT)
+        if not self.static:
+            self.x += math.sin(self.angle) * self.speed
+            self.y -= math.cos(self.angle) * self.speed
+            (self.angle, self.speed) = add_vectors(self.angle, self.speed, math.pi, MAGNITUDE_DEFAULT)
+            self.speed *= self.drag
+            self.speed *= (1 - self.size / SPEED_SIZE_DEFAULT)
 
 
 def add_vectors(angle1, length1, angle2, length2):
