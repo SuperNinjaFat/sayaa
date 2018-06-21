@@ -6,20 +6,20 @@ import random
 pygame.init()
 
 # boundaries
-SCREEN_WIDTH, SCREEN_HEIGHT = 750, 500
+SCREEN_WIDTH, SCREEN_HEIGHT = 750, 500  # 750, 500
 SCREEN_SIZE = SCREEN_WIDTH, SCREEN_HEIGHT
-FLOOR_HEIGHT = 470
+FLOOR_HEIGHT = 470  # 470
 
 # physics constants
 SPEED_DEFAULT = 0.2  # 0.2
-SPEED_SIZE_DEFAULT = 10000.0  # Makes speed vary depending upon the particle's size
+SPEED_SIZE_DEFAULT = 10000.0  # 10000.0 Makes speed vary depending upon the particle's size
 MAGNITUDE_DEFAULT = 0.002  # 0.002
 DRAG_DEFAULT = 0.9995  # 0.999
 ELASTICITY_DEFAULT = 0.75  # 0.75
 MASS_AIR_DEFAULT = 0.2  # 0.2
 
 # forces
-THRUST_SPEED_DEFAULT = 0.07  # 7.0
+THRUST_SPEED_DEFAULT = 0.002  # 0.07
 
 screen = pygame.display.set_mode(SCREEN_SIZE)
 
@@ -29,6 +29,19 @@ COLOR_GRAY_19 = 31, 31, 31
 COLOR_GRAY_21 = 54, 54, 54
 COLOR_GRAY_41 = 105, 105, 105
 COLOR_ORANGE = 251, 126, 20
+COLOR_LAVENDER = 230, 230, 250
+
+# animated colors
+COLOR_LAVENDER_ANIM = [
+    [230, 230, 250],
+    [213, 213, 241],
+    [195, 195, 222],
+    [165, 165, 189],
+    [128, 128, 148],
+    [89, 89, 103],
+    [53, 53, 60],
+    [30, 30, 37],
+    [10, 10, 12]]
 
 # fonts
 FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 15)
@@ -36,8 +49,12 @@ FONT_PAUSE = pygame.font.Font('data/fonts/r_fallouty.ttf', 25)
 FONT_PAIR_LEFT = pygame.font.Font('data/fonts/r_fallouty.ttf', 40)
 
 # particle dimensions
-WIDTH_PAIR_DEFAULT = 60
-WIDTH_PARTICLE_DEFAULT = 15
+WIDTH_PAIR_DEFAULT = 60  # 60
+WIDTH_PARTICLE_DEFAULT = 15  # 15
+
+# effect dimensions
+WIDTH_EFFECT_DEFAULT = 1  # 1
+EFFECT_RATE_DEFAULT = 2  # 2
 
 
 class Environment:
@@ -55,16 +72,14 @@ class Environment:
         self.particles_master = []
         # list to contain pairs
         self.particles_pairs = []
-
-        # dictionary to contain preparations for adding pairs into the world
-        self.particles_pairs_prep = {
-            "color": [],
-            "size": [],
-            "mass": [],
-            "strength": []}
+        # list to contain all effects
+        self.effects_master = []
 
         # amount of pairs desired to spawn
-        self.pair_amount = 5
+        self.pair_amount = 7
+
+        # dictionary to contain preparations for adding pairs into the world
+        self.particles_pairs_prep = {}
 
         # tracks what pair the player is in control of
         self.pair_player = 0
@@ -79,14 +94,24 @@ class Environment:
         self.thrust_direction = 0
 
         # define where particles_pairs will spawn to
-        self.spawner_x = int(SCREEN_WIDTH / 2) - 100
+        self.spawner_x = int(SCREEN_WIDTH / 2) - 300
         self.spawner_y = FLOOR_HEIGHT - 70
 
     def game(self):
         pygame.display.set_caption('Stand As You Are Able')
 
         # create list of particle pairs with matching orb colors todo: add file loading feature
-        self.particles_pairs_prep = self.pair_creation(p_amount=self.pair_amount)
+        list_color = []
+        list_size = []
+        list_density = []
+        list_mass = []
+        list_strength = []
+        self.particles_pairs_prep = self.pair_creation(p_amount=self.pair_amount,
+                                                       p_list_color=list_color,
+                                                       p_list_size=list_size,
+                                                       p_list_density=list_density,
+                                                       p_list_mass=list_mass,
+                                                       p_list_strength=list_strength)
 
         # create the starter orb
         orb_starter = self.orb_creation()
@@ -106,7 +131,7 @@ class Environment:
 
         # random background circle test (creates more particles)
         # loop to create and append particles
-        for i in range(3):
+        for i in range(0):
             size = random.randint(5, 10)  # (10, 20)
             density = random.randint(15, 20)  # (1, 20)
             x = random.randint(size, SCREEN_WIDTH - size)
@@ -122,9 +147,9 @@ class Environment:
         # links the keyboard input with the relevant function
         key_to_function = {
             pygame.K_LEFT:      (lambda thing: thing.set_thrust_direction(-1)),
-            pygame.K_UP:        (lambda thing: thing.set_thrust_direction(-1)),
+            pygame.K_DOWN:      (lambda thing: thing.set_thrust_direction(-1)),
             pygame.K_RIGHT:     (lambda thing: thing.set_thrust_direction(1)),
-            pygame.K_DOWN:      (lambda thing: thing.set_thrust_direction(1))
+            pygame.K_UP:        (lambda thing: thing.set_thrust_direction(1))
         }
 
         # update the simulation until the user exits
@@ -144,11 +169,15 @@ class Environment:
                     # spawn new pair
                     elif event.key == pygame.K_SPACE:
                         if self.pair_player + 1 < self.pair_amount:
-                            self.pair_activation()
                             # increase pair_player
                             self.pair_player += 1
+                            self.pair_activation()
                             # decrease indicator_pair_remaining
                             self.indicator_pair_remaining -= 1
+                            # create an effect
+                            self.effects_master.append(Effect((self.screen_width * 0.9) * 0.99 - 10,
+                                                              (self.screen_height / 8) * 0.97 + 28,
+                                                              e_color_anim=COLOR_LAVENDER_ANIM))
                     elif event.key == pygame.K_F10:
                         self.reset()
                         self.game()
@@ -165,8 +194,13 @@ class Environment:
             self.update()
             pygame.display.update()
 
+    def effect_timeout(self):
+        for h, effect in enumerate(self.effects_master):
+            if effect.timeout():
+                self.effects_master.remove(effect)
+
     # return a list specifying starter orb and particle pair color, size, mass, and strength based upon the parameters.
-    def pair_creation(self, p_amount=3, p_list_color=[], p_list_size=[], p_list_density=[], p_list_mass=[],
+    def pair_creation(self, p_amount=2, p_list_color=[], p_list_size=[], p_list_density=[], p_list_mass=[],
                       p_list_strength=[]):
         """
 
@@ -181,19 +215,19 @@ class Environment:
 
         # fill lists with ranged random values until their sizes meet the specified amount.
         # list of colors must meet the specified amount.
-        while len(p_list_color) < p_amount:
+        while len(p_list_color) - 1 < p_amount:
             p_list_color.append(rand_color())
         # list of sizes must meet the specified amount.
-        while len(p_list_size) < p_amount:
+        while len(p_list_size) - 1 < p_amount:
             p_list_size.append(random.randint(10, 15))
         # list of densities must meet the specified amount.
-        while len(p_list_density) < p_amount:
+        while len(p_list_density) - 1 < p_amount:
             p_list_density.append(random.randint(15, 20))
         # list of masses must meet the specified amount.
-        while len(p_list_mass) < p_amount:
+        while len(p_list_mass) - 1 < p_amount:
             p_list_mass.append(p_list_density[len(p_list_mass)] * p_list_size[len(p_list_mass)] ** 2)
         # list of strengths must be 1 less than the specified amount (as it only affects pairs)
-        while len(p_list_strength) + 1 < p_amount:
+        while len(p_list_strength) < p_amount:
             p_list_strength.append(0.5)
 
         # create a particle pair dictionary
@@ -262,6 +296,9 @@ class Environment:
             screen.blit(FONT_PAIR_LEFT.render(str(self.indicator_pair_remaining), False, COLOR_ORANGE),
                         ((self.screen_width * 0.9) * 0.99 - 20, (self.screen_height / 8) * 0.97))
             particle.display()
+        for h, effect in enumerate(self.effects_master):
+            self.effect_timeout()
+            effect.display()
 
     class Pair:
         def __init__(self, p_width=WIDTH_PARTICLE_DEFAULT, pp_x=int(SCREEN_WIDTH / 2), pp_y=FLOOR_HEIGHT,
@@ -383,6 +420,34 @@ class Particle:
             (self.angle, self.speed) = add_vectors(self.angle, self.speed, math.pi, MAGNITUDE_DEFAULT)
             self.speed *= self.drag
             self.speed *= (1 - self.size / SPEED_SIZE_DEFAULT)
+
+class Effect:
+    def __init__(self, x, y, static=True, e_size=WIDTH_EFFECT_DEFAULT, e_color=COLOR_LAVENDER,
+                 e_color_anim=[], thickness=1):
+        self.x, self.y = x, y
+        self.static = static
+        self.size = e_size
+        self.color = e_color
+        self.color_anim = e_color_anim
+        self.thickness = thickness
+
+        self.anim_frame = 0
+        self.anim_endframe = len(self.color_anim)-1
+
+        self.extend_frame = 0
+
+    def display(self):
+        pygame.draw.circle(screen, self.color_anim[int(self.anim_frame)], (int(self.x), int(self.y)), self.size,
+                           self.thickness)
+        self.size += int(self.extend_frame * 0.02)
+        self.extend_frame += 1
+        self.anim_frame = int(self.extend_frame * 0.05)
+
+    def timeout(self):
+        if self.anim_frame is self.anim_endframe:
+            return True
+        else:
+            return False
 
 
 def add_vectors(angle1, length1, angle2, length2):
