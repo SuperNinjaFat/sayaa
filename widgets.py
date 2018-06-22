@@ -19,7 +19,7 @@ ELASTICITY_DEFAULT = 0.75  # 0.75
 MASS_AIR_DEFAULT = 0.2  # 0.2
 
 # forces
-THRUST_SPEED_DEFAULT = 0.002  # 0.07
+THRUST_SPEED_DEFAULT = 0.001  # 0.001
 
 screen = pygame.display.set_mode(SCREEN_SIZE)
 
@@ -48,6 +48,14 @@ FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 15)
 FONT_PAUSE = pygame.font.Font('data/fonts/r_fallouty.ttf', 25)
 FONT_PAIR_LEFT = pygame.font.Font('data/fonts/r_fallouty.ttf', 40)
 
+# sound effects
+SOUND_STICK = [pygame.mixer.Sound('data/sound/airboat_gun_lastshot1.wav'),
+               pygame.mixer.Sound('data/sound/airboat_gun_lastshot2.wav')]
+SOUND_UNSTICK = pygame.mixer.Sound('data/sound/rmine_chirp_answer1.wav')
+SOUND_PAUSE = pygame.mixer.Sound('data/sound/MenuBack.wav')
+SOUND_RELOAD = pygame.mixer.Sound('data/sound/LegoDebris2.wav')
+SOUND_THRUST = pygame.mixer.Sound('data/sound/suit_sprint.wav')
+
 # particle dimensions
 WIDTH_PAIR_DEFAULT = 60  # 60
 WIDTH_PARTICLE_DEFAULT = 15  # 15
@@ -56,6 +64,8 @@ WIDTH_PARTICLE_DEFAULT = 15  # 15
 WIDTH_EFFECT_DEFAULT = 1  # 1
 EFFECT_RATE_DEFAULT = 2  # 2
 
+# sticky constants
+RESTICK_TIME_DEFAULT = 80  # 80
 
 class Environment:
     def __init__(self, width=SCREEN_WIDTH, height=SCREEN_HEIGHT, floor_height=FLOOR_HEIGHT):
@@ -74,6 +84,8 @@ class Environment:
         self.particles_pairs = []
         # list to contain all effects
         self.effects_master = []
+        # list to contain all boundaries
+        self.boundaries_master = []
 
         # amount of pairs desired to spawn
         self.pair_amount = 7
@@ -92,6 +104,8 @@ class Environment:
         self.paused = False
 
         self.thrust_direction = 0
+
+        self.lift_direction = 0
 
         # define where particles_pairs will spawn to
         self.spawner_x = int(SCREEN_WIDTH / 2) - 300
@@ -114,7 +128,7 @@ class Environment:
                                                        p_list_strength=list_strength)
 
         # create the starter orb
-        orb_starter = self.orb_creation()
+        orb_starter = self.orb_creation(sticky=True)
 
         # # create particle pairs:
         # pair_1 = self.Pair(p_width=20, pp_x=int(SCREEN_WIDTH / 2) - 60, pp_mass=1000, pp_strength=1)
@@ -146,10 +160,10 @@ class Environment:
 
         # links the keyboard input with the relevant function
         key_to_function = {
-            pygame.K_LEFT:      (lambda thing: thing.set_thrust_direction(-1)),
-            pygame.K_DOWN:      (lambda thing: thing.set_thrust_direction(-1)),
-            pygame.K_RIGHT:     (lambda thing: thing.set_thrust_direction(1)),
-            pygame.K_UP:        (lambda thing: thing.set_thrust_direction(1))
+            pygame.K_LEFT:      (lambda thing: thing.set_thrust_direction(1)),
+            pygame.K_DOWN:      (lambda thing: thing.set_lift_direction(1)),
+            pygame.K_RIGHT:     (lambda thing: thing.set_thrust_direction(-1)),
+            pygame.K_UP:        (lambda thing: thing.set_lift_direction(-1))
         }
 
         # update the simulation until the user exits
@@ -163,26 +177,45 @@ class Environment:
                     # print("event.key (DOWN): ", event.key)
                     if event.key in key_to_function:
                         key_to_function[event.key](self)
+                        play_sfx(SOUND_THRUST)
                     # pause the game
                     elif event.key == pygame.K_ESCAPE:
                         self.paused = not self.paused
+                        play_sfx(SOUND_PAUSE)
                     # spawn new pair
-                    elif event.key == pygame.K_SPACE:
-                        if self.pair_player + 1 < self.pair_amount:
-                            # increase pair_player
-                            self.pair_player += 1
-                            self.pair_activation()
-                            # decrease indicator_pair_remaining
-                            self.indicator_pair_remaining -= 1
-                            # create an effect
-                            self.effects_master.append(Effect((self.screen_width * 0.9) * 0.99 - 10,
-                                                              (self.screen_height / 8) * 0.97 + 28,
-                                                              e_color_anim=COLOR_LAVENDER_ANIM))
+                    elif event.key == pygame.K_SPACE and (self.pair_player + 1 < self.pair_amount)\
+                        and self.particles_pairs[self.pair_player].orb1.static and not self.paused:
+                        self.particles_pairs[self.pair_player].orb2.static = True
+                        self.particles_pairs[self.pair_player].orb2.sticky = True
+                        # increase pair_player
+                        self.pair_player += 1
+                        self.pair_activation()
+                        # decrease indicator_pair_remaining
+                        self.indicator_pair_remaining -= 1
+                        # create effects
+                        self.effects_master.append(Effect((self.screen_width * 0.9) * 0.99 - 10,
+                                                          (self.screen_height / 8) * 0.97 + 28,
+                                                          e_color_anim=COLOR_LAVENDER_ANIM))
+                        self.effects_master.append(Effect(self.particles_pairs[self.pair_player].orb2.x,
+                                                          self.particles_pairs[self.pair_player].orb2.y,
+                                                          e_color_anim=COLOR_LAVENDER_ANIM))
+                        # play sound effect
+                        play_sfx(SOUND_STICK)
                     elif event.key == pygame.K_F10:
+                        play_sfx(SOUND_RELOAD)
                         self.reset()
                         self.game()
+                    elif event.key == pygame.K_BACKSPACE:
+                        if self.particles_pairs[self.pair_player].orb1.static:
+                            self.particles_pairs[self.pair_player].orb1.static = False
+                            self.particles_pairs[self.pair_player].orb1.sticky = True
+                            self.particles_pairs[self.pair_player].orb1.stuck_to.restick = True
+                            self.particles_pairs[self.pair_player].orb1.stuck_to.stuck_to = Particle
+                            self.particles_pairs[self.pair_player].orb1.stuck_to = Particle
+                            # play sound effect
+                            play_sfx(SOUND_UNSTICK)
                 elif event.type == pygame.KEYUP:
-                    self.thrust_direction = 0
+                    self.thrust_direction, self.lift_direction = 0, 0
                 # elif event.type == pygame.KEYUP:
                 #     # print("event.key (UP):   ", event.key)
                 #     if pygame.K_UP == event.key or pygame.K_LEFT == event.key:
@@ -241,17 +274,34 @@ class Environment:
         # return the list of pairs
         return pair_dict
 
-    def orb_creation(self, p_x=int(SCREEN_WIDTH / 2), p_y=FLOOR_HEIGHT):
+    def orb_creation(self, p_x=int(SCREEN_WIDTH / 2), p_y=FLOOR_HEIGHT, sticky=False):
         """
 
+        :param sticky: Determines whether it can stick to another orb.
         :param p_x: x placement for starter orb. Defaults to the center of the screen.
         :param p_y: y placement for the starter orb. Defaults to merge with the floor.
         :return returns the starter orb.
         """
         # create starter orb
-        orb_starter = Particle(x=p_x, y=p_y, static=True, p_color=self.particles_pairs_prep["color"][0],
+        orb_starter = Particle(x=p_x, y=p_y, static=True, sticky=sticky, p_color=self.particles_pairs_prep["color"][0],
                                p_size=self.particles_pairs_prep["size"][0], p_mass=self.particles_pairs_prep["mass"][0])
         return orb_starter
+
+    # creates ingame boundaries and obstacles
+    def boundary_creation(self, b_list_wall):
+        boundary_dict = {
+            "wall": b_list_wall
+        }
+
+        return boundary_dict
+
+    def boundary_activation(self):
+        for i, boundary in enumerate(self.boundaries_master):
+            boundary
+        for w in range(len(self.boundaries_master["wall"])):
+            # contains list of coordinates for walls
+            for b in range(len(self.boundaries_master["wall"][w])):
+                self.boundaries_master["wall"][w][b]
 
     # places the next pair in particles_pairs into the world and iterates pair_player to reflect this
     def pair_activation(self):
@@ -268,8 +318,16 @@ class Environment:
         self.particles_master.append(self.particles_pairs[len(self.particles_pairs)-1].orb1)
         self.particles_master.append(self.particles_pairs[len(self.particles_pairs)-1].orb2)
 
+    def set_lift_direction(self, direction):
+        self.lift_direction = direction
+
     def set_thrust_direction(self, direction):
         self.thrust_direction = direction
+
+    def lift(self):
+        if self.lift_direction is not 0 and self.particles_pairs:
+            print("lift:  ", self.lift_direction)
+            self.particles_pairs[self.pair_player].lift(self.lift_direction)
 
     def thrust(self):
         if self.thrust_direction is not 0 and self.particles_pairs:
@@ -280,14 +338,17 @@ class Environment:
     def update(self):
         for j, spring in enumerate(self.particles_pairs):
             spring.display()
-            spring.update()
+            if not self.paused:
+                spring.update()
         for i, particle in enumerate(self.particles_master):
             if not self.paused:
                 particle.move()
                 particle.bounce()
                 for particle2 in self.particles_master[i + 1:]:
                     collide(particle, particle2)
+                particle.restick_timeout()
                 self.thrust()
+                self.lift()
             else:
                 # pause screen text
                 screen.blit(FONT_PAUSE.render("PAUSED", False, COLOR_ORANGE),
@@ -296,6 +357,8 @@ class Environment:
             screen.blit(FONT_PAIR_LEFT.render(str(self.indicator_pair_remaining), False, COLOR_ORANGE),
                         ((self.screen_width * 0.9) * 0.99 - 20, (self.screen_height / 8) * 0.97))
             particle.display()
+            # draw floor
+            pygame.draw.aaline(screen, COLOR_GRAY_21, (0, self.floor_height), (self.screen_width, self.floor_height))
         for h, effect in enumerate(self.effects_master):
             self.effect_timeout()
             effect.display()
@@ -314,7 +377,7 @@ class Environment:
             # adjust floor placement based on width
             self.orb_pair = []
             pp_y -= p_width
-            self.orb1 = Particle(pp_x, pp_y, p_color=pp_color_1, p_size=p_width, p_mass=pp_mass)
+            self.orb1 = Particle(pp_x, pp_y, sticky=True, p_color=pp_color_1, p_size=p_width, p_mass=pp_mass)
             self.orb2 = Particle(pp_x + pp_length, pp_y, p_color=pp_color_2, p_size=p_width, p_mass=pp_mass)
             self.orb_pair.append(self.orb1)
             self.orb_pair.append(self.orb2)
@@ -326,6 +389,29 @@ class Environment:
             pygame.draw.aaline(screen, COLOR_GRAY_21, (int(self.orb1.x), int(self.orb1.y)),
                                    (int(self.orb2.x), int(self.orb2.y)))
 
+        def lift(self, amount):
+            # set what orb is to the left and which one is on the right
+            if self.orb1.y == self.orb2.y:
+                orb_left = 0
+                orb_right = 1
+            else:
+                orb_left = 1
+                orb_right = 0
+            dx = self.orb1.x - self.orb2.x
+            dy = self.orb1.y - self.orb2.y
+            theta = 2 * math.atan2(dy, dx)
+            # if amount is negative, lift up
+            if amount is -1:
+                # apply thrust to orb_left
+                print("left orb theta:  ", theta)
+                self.orb_pair[orb_left].accelerate(theta, THRUST_SPEED_DEFAULT)
+            # if amount is positive, lift up
+            else:
+                # apply thrust to orb_right
+                print("right orb theta:  ", theta)
+                self.orb_pair[orb_right].accelerate(theta, THRUST_SPEED_DEFAULT)
+
+
         def thrust(self, amount):
             # set what orb is to the left and which one is on the right
             if self.orb1.x <= self.orb2.x:
@@ -336,18 +422,14 @@ class Environment:
                 orb_right = 0
             dx = self.orb1.x - self.orb2.x
             dy = self.orb1.y - self.orb2.y
-            theta = math.atan2(dy, dx)  # - 0.5 * math.pi
+            theta = 2 * math.atan2(dy, dx)
             # if amount is negative, move left
             if amount is -1:
-                # todo: calculate the angle at which the thrust should be applied
-                theta = theta + 0.5 * math.pi
                 # apply thrust to orb_left
                 print("left orb theta:  ", theta)
                 self.orb_pair[orb_left].accelerate(theta, THRUST_SPEED_DEFAULT)
             # if amount is positive, move right
             else:
-                # todo: calculate the angle at which the thrust should be applied
-                theta = -theta - 0.5 * math.pi
                 # apply thrust to orb_right
                 print("right orb theta:  ", theta)
                 self.orb_pair[orb_right].accelerate(theta, THRUST_SPEED_DEFAULT)
@@ -365,10 +447,16 @@ class Environment:
 
 
 class Particle:
-    def __init__(self, x, y, static=False, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
+    def __init__(self, x, y, static=False, sticky=False, p_size=WIDTH_PARTICLE_DEFAULT, p_color=COLOR_ORANGE, p_thickness=1, p_angle=(math.pi / 2),
                  p_speed=SPEED_DEFAULT, p_mass=1, p_text=None):
         self.x, self.y = x, y
         self.static = static
+        # whether the orb color sticks to its matching color
+        self.sticky = sticky
+        self.restick = False
+        self.stuck_to = Particle
+        self.restick_time = 0
+
         self.size = p_size
         self.speed = p_speed
         self.angle = p_angle
@@ -421,6 +509,13 @@ class Particle:
             self.speed *= self.drag
             self.speed *= (1 - self.size / SPEED_SIZE_DEFAULT)
 
+    def restick_timeout(self):
+        if self.restick:
+            if self.restick_time == RESTICK_TIME_DEFAULT:
+                self.sticky, self.restick = True, False
+            else:
+                self.restick_time += 1
+
 class Effect:
     def __init__(self, x, y, static=True, e_size=WIDTH_EFFECT_DEFAULT, e_color=COLOR_LAVENDER,
                  e_color_anim=[], thickness=1):
@@ -449,6 +544,19 @@ class Effect:
         else:
             return False
 
+class Wall:
+    def __init__(self, x1, y1, x2, y2, x3, y3, x4, y4, w_color=COLOR_GRAY_21):
+        self.x1, self.y1 = x1, y1
+        self.x2, self.y2 = x2, y2
+        self.x3, self.y3 = x3, y3
+        self.x4, self.y4 = x4, y4
+        self.color = w_color
+
+    def display(self):
+        pygame.draw.polygon(screen, self.color, [[int(self.x1), int(self.y1)],
+                                                 [int(self.x2), int(self.y2)],
+                                                 [int(self.x3), int(self.y3)],
+                                                 [int(self.x4), int(self.y4)]])
 
 def add_vectors(angle1, length1, angle2, length2):
     x = math.sin(angle1) * length1 + math.sin(angle2) * length2
@@ -464,32 +572,37 @@ def collide(p1, p2):
 
     distance = math.hypot(dx, dy)
     if distance < p1.size + p2.size:
-        total_mass = p1.mass + p2.mass
-        # angle = 0.5 * math.pi + tangent
-        # tangent = math.atan2(dx, dy)
-        # p1.angle = 2 * tangent - p1.angle
-        # p2.angle = 2 * tangent - p2.angle
-        angle = math.atan2(dy, dx) + 0.5 * math.pi
-        # (p1.speed, p2.speed) = (p2.speed, p1.speed)
-        (p1.angle, p1.speed) = add_vectors(p1.angle, p1.speed * (p1.mass - p2.mass) / total_mass,
-                                           angle, 2 * p2.speed * p2.mass / total_mass)
-        (p2.angle, p2.speed) = add_vectors(p2.angle, p2.speed * (p2.mass - p1.mass) / total_mass,
-                                           angle + math.pi, 2 * p1.speed * p1.mass / total_mass)
-        if not p1.static:
-            p1.speed *= ELASTICITY_DEFAULT
-        if not p2.static:
-            p2.speed *= ELASTICITY_DEFAULT
-        overlap = 0.5 * (p1.size + p2.size - distance + 1)
-        if not p1.static:
-            # p1.x += math.sin(angle)
-            p1.x += math.sin(angle) * overlap
-            # p1.y -= math.cos(angle)
-            p1.y -= math.cos(angle) * overlap
-        if not p2.static:
-            # p2.x -= math.sin(angle)
-            p2.x -= math.sin(angle) * overlap
-            # p2.y += math.cos(angle)
-            p2.y += math.cos(angle) * overlap
+        if p2.sticky and p1.sticky:
+            p1.static, p2.static, p1.sticky, p2.sticky = True, True, False, False
+            p1.stuck_to, p2.stuck_to = p2, p1
+            play_sfx(SOUND_STICK)
+        else:
+            total_mass = p1.mass + p2.mass
+            # angle = 0.5 * math.pi + tangent
+            # tangent = math.atan2(dx, dy)
+            # p1.angle = 2 * tangent - p1.angle
+            # p2.angle = 2 * tangent - p2.angle
+            angle = math.atan2(dy, dx) + 0.5 * math.pi
+            # (p1.speed, p2.speed) = (p2.speed, p1.speed)
+            (p1.angle, p1.speed) = add_vectors(p1.angle, p1.speed * (p1.mass - p2.mass) / total_mass,
+                                               angle, 2 * p2.speed * p2.mass / total_mass)
+            (p2.angle, p2.speed) = add_vectors(p2.angle, p2.speed * (p2.mass - p1.mass) / total_mass,
+                                               angle + math.pi, 2 * p1.speed * p1.mass / total_mass)
+            if not p1.static:
+                p1.speed *= ELASTICITY_DEFAULT
+            if not p2.static:
+                p2.speed *= ELASTICITY_DEFAULT
+            overlap = 0.5 * (p1.size + p2.size - distance + 1)
+            if not p1.static:
+                # p1.x += math.sin(angle)
+                p1.x += math.sin(angle) * overlap
+                # p1.y -= math.cos(angle)
+                p1.y -= math.cos(angle) * overlap
+            if not p2.static:
+                # p2.x -= math.sin(angle)
+                p2.x -= math.sin(angle) * overlap
+                # p2.y += math.cos(angle)
+                p2.y += math.cos(angle) * overlap
 
 
 def rand_color():
@@ -497,7 +610,6 @@ def rand_color():
     for x in range(3):
         color.append(random.randint(0, 255))
     return color
-
 
 # adapted from https://stackoverflow.com/questions/20842801/how-to-display-text-in-pygame
 def text_to_screen(text, x, y, size=50,
@@ -512,3 +624,10 @@ def text_to_screen(text, x, y, size=50,
     except Exception as e:
         print('Font Error')
         raise e
+
+def play_sfx(sound):
+    # play a random sound effect if it is in a list
+    if isinstance(sound, list):
+        pygame.mixer.Sound(sound[random.randint(0, len(sound)-1)]).play()
+    else:
+        pygame.mixer.Sound(sound).play()
