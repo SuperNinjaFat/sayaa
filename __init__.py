@@ -3,7 +3,9 @@ from widgets import *
 
 def main():
     env = Environment()
-    env.game()
+    while True:
+        env.main_menu()
+        env.game()
 
 
 if __name__ == '__main__':

@@ -8,7 +8,7 @@ pygame.init()
 # boundaries
 SCREEN_WIDTH, SCREEN_HEIGHT = 750, 500  # 750, 500
 SCREEN_SIZE = SCREEN_WIDTH, SCREEN_HEIGHT
-FLOOR_HEIGHT = 470  # 470
+FLOOR_HEIGHT = SCREEN_HEIGHT - 45
 
 # physics constants
 SPEED_DEFAULT = 0.2  # 0.2
@@ -46,6 +46,7 @@ COLOR_LAVENDER_ANIM = [
 # fonts
 FONT_ORB_DEFAULT = pygame.font.Font('data/fonts/r_fallouty.ttf', 15)
 FONT_PAUSE = pygame.font.Font('data/fonts/r_fallouty.ttf', 25)
+FONT_TITLE = pygame.font.Font('data/fonts/r_fallouty.ttf', 50)
 FONT_PAIR_LEFT = pygame.font.Font('data/fonts/r_fallouty.ttf', 40)
 
 # sound effects
@@ -66,6 +67,42 @@ EFFECT_RATE_DEFAULT = 2  # 2
 
 # sticky constants
 RESTICK_TIME_DEFAULT = 80  # 80
+
+
+# adapted from https://pythonprogramming.net/pygame-button-function/?completed=/placing-text-pygame-buttons/
+def button(msg,x,y,w,h,ic,ac,action=None):
+    mouse = pygame.mouse.get_pos()
+    click = pygame.mouse.get_pressed()
+    print(click)
+    if x+w > mouse[0] > x and y+h > mouse[1] > y:
+        pygame.draw.rect(screen, ac,(x,y,w,h))
+
+        if click[0] == 1 and action != None:
+            action()
+    else:
+        pygame.draw.rect(screen, ic,(x,y,w,h))
+
+    textSurf, textRect = text_objects(msg, FONT_ORB_DEFAULT)
+    textRect.center = ( (x+(w/2)), (y+(h/2)) )
+    screen.blit(textSurf, textRect)
+
+
+# adapted from https://pythonprogramming.net/pygame-start-menu-tutorial/
+def text_objects(text, font):
+    textSurface = font.render(text, True, COLOR_BLACK)
+    return textSurface, textSurface.get_rect()
+
+
+# adapted from https://pythonprogramming.net/pygame-start-menu-tutorial/
+def message_display(text):
+    TextSurf, TextRect = text.text_objects(text, FONT_PAUSE)
+    TextRect.center = ((SCREEN_WIDTH / 2), (SCREEN_HEIGHT / 2))
+    screen.blit(TextSurf, TextRect)
+
+    pygame.display.update()
+
+    # time.sleep(2)
+
 
 class Environment:
     def __init__(self, width=SCREEN_WIDTH, height=SCREEN_HEIGHT, floor_height=FLOOR_HEIGHT):
@@ -444,6 +481,31 @@ class Environment:
 
             self.orb1.accelerate(theta + 0.5 * math.pi, force/self.orb1.mass)
             self.orb2.accelerate(theta - 0.5 * math.pi, force/self.orb2.mass)
+
+    # used this for reference: https://pythonprogramming.net/pygame-start-menu-tutorial/
+    def main_menu(self):
+        while 1:
+            for event in pygame.event.get():
+                print(event)
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
+
+            screen.fill(COLOR_LAVENDER)
+            TextSurf, TextRect = text_objects("Stand As You Are Able", FONT_TITLE)
+            TextRect.center = ((SCREEN_WIDTH / 2), (SCREEN_HEIGHT / 2))
+            screen.blit(TextSurf, TextRect)
+
+            button("New Game", 150, 450, 100, 50, COLOR_GRAY_21, COLOR_GRAY_41, self.game)
+            button("Quit", 550, 450, 100, 50, COLOR_GRAY_19, COLOR_GRAY_21, quit)
+
+            mouse = pygame.mouse.get_pos()
+
+
+
+            pygame.display.update()
+
+
 
 
 class Particle:
